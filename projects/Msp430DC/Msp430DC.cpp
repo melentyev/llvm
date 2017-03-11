@@ -25,6 +25,7 @@ object::OwningBinary<object::ObjectFile> Msp430DC::compileModule(Module *M) {
 
 	std::unique_ptr<TargetMachine> Target(
 		TheTarget->createTargetMachine(TheTriple.getTriple(), CPUStr, FeaturesStr,
+			Options, Reloc::Default, CMModel, OLvl));
 
 	assert(Target && "Could not allocate target machine!");
 
