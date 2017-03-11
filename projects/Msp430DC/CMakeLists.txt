@@ -1,0 +1,19 @@
+set(LLVM_LINK_COMPONENTS
+  ${LLVM_TARGETS_TO_BUILD}
+  Analysis
+  AsmPrinter
+  CodeGen
+  Core
+  IRReader
+  MC
+  Object
+  ScalarOpts
+  SelectionDAG
+  Support
+  Target
+  TransformUtils
+  )
+
+add_llvm_library(Msp430DC
+  Msp430DC.cpp
+  )

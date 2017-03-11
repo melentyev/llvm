@@ -70,15 +70,31 @@ def MSP430srl     : SDNode<"MSP430ISD::SRL", SDT_MSP430Shift, []>;
 // MSP430 Operand Definitions.
 //===----------------------------------------------------------------------===//
 
+def opcodeUNKNOWN: IOPCODE<0b0000>;
+
+def opcodeMOV: IOPCODE<0b0100>;
+def opcodeADD: IOPCODE<0b0101>;
+def opcodeSUB: IOPCODE<0b1000>;
+def opcodeXOR: IOPCODE<0b1110>;
+def opcodeAND: IOPCODE<0b1111>;
+
+def opcodeRRC:  IIOPCODE<0b000100000>;
+def opcodeSWPB: IIOPCODE<0b000100001>;
+def opcodeRRA:  IIOPCODE<0b000100010>;
+def opcodeSXT:  IIOPCODE<0b000100011>;
+def opcodePUSH: IIOPCODE<0b000100100>;
+def opcodeCALL: IIOPCODE<0b000100101>;
+def opcodeRETI: IIOPCODE<0b000100110>;
+
 // Address operands
 def memsrc : Operand<i16> {
   let PrintMethod = "printSrcMemOperand";
-  let MIOperandInfo = (ops GR16, i16imm);
+  let MIOperandInfo = (ops GR16:$MEMSRCREG, i16imm:$MEMSRCIMM);
 }
 
 def memdst : Operand<i16> {
   let PrintMethod = "printSrcMemOperand";
-  let MIOperandInfo = (ops GR16, i16imm);
+  let MIOperandInfo = (ops GR16:$MEMDSTREG, i16imm:$MEMDSTIMM);
 }
 
 // Short jump targets have OtherVT type and are printed as pcrel imm values.
@@ -162,9 +178,13 @@ def NOP : Pseudo<(outs), (ins), "nop", []>;
 
 // FIXME: Provide proper encoding!
 let isReturn = 1, isTerminator = 1, isBarrier = 1 in {
-  def RET  : IForm16<0x0, DstReg, SrcPostInc, Size2Bytes,
-                     (outs), (ins), "ret",  [(MSP430retflag)]>;
-  def RETI : II16r<0x0, (outs), (ins), "reti", [(MSP430retiflag)]>;
+  def RET  : IForm16_WELL<opcodeMOV, DstReg, SrcPostInc, Size2Bytes,
+                     (outs), (ins), "ret",  [(MSP430retflag)]> {
+	let Inst{11-8} = 1;
+	let Inst{3-0} = 0;
+  }
+
+  def RETI : II16r<opcodeRETI, (outs), (ins), "reti", [(MSP430retiflag)]> { let dst = 0; }
 }
 
 let isBranch = 1, isTerminator = 1 in {
@@ -174,9 +194,9 @@ let isBranch = 1, isTerminator = 1 in {
 // Direct branch
 let isBarrier = 1 in {
   // Short branch
-  def JMP : CJForm<0, 0, (outs), (ins jmptarget:$dst),
+  def JMP : CJForm<(outs), (ins jmptarget:$dst),
                    "jmp\t$dst",
-                   [(br bb:$dst)]>;
+                   [(br bb:$dst)]> { let cc = 0b111; }
   let isIndirectBranch = 1 in {
     // Long branches
     def Bi  : I16ri<0, (outs), (ins i16imm:$brdst),
@@ -193,8 +213,7 @@ let isBarrier = 1 in {
 
 // Conditional branches
 let Uses = [SR] in
-  def JCC : CJForm<0, 0,
-                   (outs), (ins jmptarget:$dst, cc:$cc),
+  def JCC : CJForm<(outs), (ins jmptarget:$dst, cc:$cc),
                    "j$cc\t$dst",
                    [(MSP430brcc bb:$dst, imm:$cc)]>;
 } // isBranch, isTerminator
@@ -209,10 +228,10 @@ let isCall = 1 in
   // registers are added manually.
   let Defs = [R12, R13, R14, R15, SR],
       Uses = [SP] in {
-    def CALLi     : II16i<0x0,
+    def CALLi     : II16i<opcodeCALL,
                           (outs), (ins i16imm:$dst),
                           "call\t$dst", [(MSP430call imm:$dst)]>;
-    def CALLr     : II16r<0x0,
+    def CALLr     : II16r<opcodeCALL,
                           (outs), (ins GR16:$dst),
                           "call\t$dst", [(MSP430call GR16:$dst)]>;
     def CALLm     : II16m<0x0,
@@ -226,12 +245,16 @@ let isCall = 1 in
 //
 let Defs = [SP], Uses = [SP], hasSideEffects=0 in {
 let mayLoad = 1 in
-def POP16r   : IForm16<0x0, DstReg, SrcPostInc, Size2Bytes,
-                       (outs GR16:$reg), (ins), "pop.w\t$reg", []>;
+def POP16r   : IForm16_WELL<opcodeMOV, DstReg, SrcPostInc, Size2Bytes,
+                       (outs GR16:$reg), (ins), "pop.w\t$reg", []> {
+    bits<4> reg;
+    let Inst{11-8} = 1;
+    let Inst{3-0} = reg;
+  }
 
 let mayStore = 1 in
-def PUSH16r  : II16r<0x0,
-                     (outs), (ins GR16:$reg), "push.w\t$reg",[]>;
+def PUSH16r  : II16r<opcodePUSH,
+                     (outs), (ins GR16:$dst), "push.w\t$dst",[]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -239,53 +262,53 @@ def PUSH16r  : II16r<0x0,
 
 // FIXME: Provide proper encoding!
 let hasSideEffects = 0 in {
-def MOV8rr  : I8rr<0x0,
+def MOV8rr  : I8rr<opcodeMOV,
                    (outs GR8:$dst), (ins GR8:$src),
                    "mov.b\t{$src, $dst}",
                    []>;
-def MOV16rr : I16rr<0x0,
+def MOV16rr : I16rr<0x4,
                     (outs GR16:$dst), (ins GR16:$src),
                     "mov.w\t{$src, $dst}",
-                    []>;
+                    []> { bits<4> src; bits<4> dst; let Inst{11-8} = src; let Inst{3-0}  = dst; }
 }
 
 // FIXME: Provide proper encoding!
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
-def MOV8ri  : I8ri<0x0,
+def MOV8ri  : I8ri<0x4,
                    (outs GR8:$dst), (ins i8imm:$src),
                    "mov.b\t{$src, $dst}",
                    [(set GR8:$dst, imm:$src)]>;
-def MOV16ri : I16ri<0x0,
-                    (outs GR16:$dst), (ins i16imm:$src),
-                    "mov.w\t{$src, $dst}",
-                    [(set GR16:$dst, imm:$src)]>;
+def MOV16ri : I16ri_WELL<opcodeMOV,
+                    (outs GR16:$dst), (ins i16imm:$IMM),
+                    "mov.w\t{$IMM, $dst}",
+                    [(set GR16:$dst, imm:$IMM)]>;
 }
 
 let canFoldAsLoad = 1, isReMaterializable = 1 in {
-def MOV8rm  : I8rm<0x0,
+def MOV8rm  : I8rm<0x4,
                    (outs GR8:$dst), (ins memsrc:$src),
                    "mov.b\t{$src, $dst}",
                    [(set GR8:$dst, (load addr:$src))]>;
-def MOV16rm : I16rm<0x0,
+def MOV16rm : I16rm_WELL<opcodeMOV,
                     (outs GR16:$dst), (ins memsrc:$src),
                     "mov.w\t{$src, $dst}",
-                    [(set GR16:$dst, (load addr:$src))]>;
+                    [(set GR16:$dst, (load addr:$src))]> { let DisableEncoding = "$dst"; }
 }
 
-def MOVZX16rr8 : I8rr<0x0,
+def MOVZX16rr8 : I8rr<opcodeMOV,
                       (outs GR16:$dst), (ins GR8:$src),
                       "mov.b\t{$src, $dst}",
                       [(set GR16:$dst, (zext GR8:$src))]>;
-def MOVZX16rm8 : I8rm<0x0,
+def MOVZX16rm8 : I8rm<0x4,
                       (outs GR16:$dst), (ins memsrc:$src),
                       "mov.b\t{$src, $dst}",
                       [(set GR16:$dst, (zextloadi16i8 addr:$src))]>;
 
 let mayLoad = 1, hasExtraDefRegAllocReq = 1, Constraints = "$base = $base_wb" in {
-def MOV8rm_POST  : IForm8<0x0, DstReg, SrcPostInc, Size2Bytes,
+def MOV8rm_POST  : IForm8<0x4, DstReg, SrcPostInc, Size2Bytes,
                          (outs GR8:$dst, GR16:$base_wb), (ins GR16:$base),
                          "mov.b\t{@$base+, $dst}", []>;
-def MOV16rm_POST : IForm16<0x0, DstReg, SrcPostInc, Size2Bytes,
+def MOV16rm_POST : IForm16<0x4, DstReg, SrcPostInc, Size2Bytes,
                            (outs GR16:$dst, GR16:$base_wb), (ins GR16:$base),
                            "mov.w\t{@$base+, $dst}", []>;
 }
@@ -305,29 +328,29 @@ def def8 : PatLeaf<(i8 GR8:$src), [{
 def : Pat<(i16 (zext def8:$src)),
           (SUBREG_TO_REG (i16 0), GR8:$src, subreg_8bit)>;
 
-def MOV8mi  : I8mi<0x0,
+def MOV8mi  : I8mi<0x4,
                    (outs), (ins memdst:$dst, i8imm:$src),
                    "mov.b\t{$src, $dst}",
                    [(store (i8 imm:$src), addr:$dst)]>;
-def MOV16mi : I16mi<0x0,
+def MOV16mi : I16mi_WELL<0x4,
                     (outs), (ins memdst:$dst, i16imm:$src),
                     "mov.w\t{$src, $dst}",
                     [(store (i16 imm:$src), addr:$dst)]>;
 
-def MOV8mr  : I8mr<0x0,
+def MOV8mr  : I8mr<0x4,
                    (outs), (ins memdst:$dst, GR8:$src),
                    "mov.b\t{$src, $dst}",
                    [(store GR8:$src, addr:$dst)]>;
-def MOV16mr : I16mr<0x0,
+def MOV16mr : I16mr_WELL<0x4,
                     (outs), (ins memdst:$dst, GR16:$src),
                     "mov.w\t{$src, $dst}",
                     [(store GR16:$src, addr:$dst)]>;
 
-def MOV8mm  : I8mm<0x0,
+def MOV8mm  : I8mm<0x4,
                    (outs), (ins memdst:$dst, memsrc:$src),
                    "mov.b\t{$src, $dst}",
                    [(store (i8 (load addr:$src)), addr:$dst)]>;
-def MOV16mm : I16mm<0x0,
+def MOV16mm : I16mm<0x4,
                     (outs), (ins memdst:$dst, memsrc:$src),
                     "mov.w\t{$src, $dst}",
                     [(store (i16 (load addr:$src)), addr:$dst)]>;
@@ -341,83 +364,83 @@ let Defs = [SR] in {
 
 let isCommutable = 1 in { // X = ADD Y, Z  == X = ADD Z, Y
 
-def ADD8rr  : I8rr<0x0,
+def ADD8rr  : I8rr<opcodeADD,
                    (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                    "add.b\t{$src2, $dst}",
                    [(set GR8:$dst, (add GR8:$src, GR8:$src2)),
                     (implicit SR)]>;
-def ADD16rr : I16rr<0x0,
+def ADD16rr : I16rr_WELL<opcodeADD,
                     (outs GR16:$dst), (ins GR16:$src, GR16:$src2),
                     "add.w\t{$src2, $dst}",
                     [(set GR16:$dst, (add GR16:$src, GR16:$src2)),
                      (implicit SR)]>;
 }
 
-def ADD8rm  : I8rm<0x0,
+def ADD8rm  : I8rm<0b0101,
                    (outs GR8:$dst), (ins GR8:$src, memsrc:$src2),
                    "add.b\t{$src2, $dst}",
                    [(set GR8:$dst, (add GR8:$src, (load addr:$src2))),
                     (implicit SR)]>;
-def ADD16rm : I16rm<0x0,
+def ADD16rm : I16rm_WELL<opcodeADD,
                     (outs GR16:$dst), (ins GR16:$src, memsrc:$src2),
                     "add.w\t{$src2, $dst}",
                     [(set GR16:$dst, (add GR16:$src, (load addr:$src2))),
-                     (implicit SR)]>;
+                     (implicit SR)]> { let DisableEncoding = "$src,$dst"; }
 
 let mayLoad = 1, hasExtraDefRegAllocReq = 1, 
 Constraints = "$base = $base_wb, $src = $dst" in {
-def ADD8rm_POST : IForm8<0x0, DstReg, SrcPostInc, Size2Bytes,
+def ADD8rm_POST : IForm8<0b0101, DstReg, SrcPostInc, Size2Bytes,
                          (outs GR8:$dst, GR16:$base_wb),
                          (ins GR8:$src, GR16:$base),
                          "add.b\t{@$base+, $dst}", []>;
-def ADD16rm_POST : IForm16<0x0, DstReg, SrcPostInc, Size2Bytes,
+def ADD16rm_POST : IForm16<0b0101, DstReg, SrcPostInc, Size2Bytes,
                            (outs GR16:$dst, GR16:$base_wb),
                            (ins GR16:$src, GR16:$base),
                           "add.w\t{@$base+, $dst}", []>;
 }
 
 
-def ADD8ri  : I8ri<0x0,
+def ADD8ri  : I8ri<0b0101,
                    (outs GR8:$dst), (ins GR8:$src, i8imm:$src2),
                    "add.b\t{$src2, $dst}",
                    [(set GR8:$dst, (add GR8:$src, imm:$src2)),
                     (implicit SR)]>;
-def ADD16ri : I16ri<0x0,
-                    (outs GR16:$dst), (ins GR16:$src, i16imm:$src2),
-                    "add.w\t{$src2, $dst}",
-                    [(set GR16:$dst, (add GR16:$src, imm:$src2)),
+def ADD16ri : I16ri_WELL<opcodeADD,
+                    (outs GR16:$dst), (ins GR16:$src, i16imm:$IMM),
+                    "add.w\t{$IMM, $dst}",
+                    [(set GR16:$dst, (add GR16:$src, imm:$IMM)),
                      (implicit SR)]>;
 
 let Constraints = "" in {
-def ADD8mr  : I8mr<0x0,
+def ADD8mr  : I8mr<0b0101,
                    (outs), (ins memdst:$dst, GR8:$src),
                    "add.b\t{$src, $dst}",
                    [(store (add (load addr:$dst), GR8:$src), addr:$dst),
                     (implicit SR)]>;
-def ADD16mr : I16mr<0x0,
+def ADD16mr : I16mr_WELL<0b0101,
                     (outs), (ins memdst:$dst, GR16:$src),
                     "add.w\t{$src, $dst}",
                     [(store (add (load addr:$dst), GR16:$src), addr:$dst),
                      (implicit SR)]>;
 
-def ADD8mi  : I8mi<0x0,
+def ADD8mi  : I8mi<0b0101,
                    (outs), (ins memdst:$dst, i8imm:$src),
                    "add.b\t{$src, $dst}",
                    [(store (add (load addr:$dst), (i8 imm:$src)), addr:$dst),
                     (implicit SR)]>;
-def ADD16mi : I16mi<0x0,
+def ADD16mi : I16mi_WELL<0b0101,
                     (outs), (ins memdst:$dst, i16imm:$src),
                     "add.w\t{$src, $dst}",
                     [(store (add (load addr:$dst), (i16 imm:$src)), addr:$dst),
                      (implicit SR)]>;
 
-def ADD8mm  : I8mm<0x0,
+def ADD8mm  : I8mm<0b0101,
                    (outs), (ins memdst:$dst, memsrc:$src),
                    "add.b\t{$src, $dst}",
                    [(store (add (load addr:$dst), 
                                 (i8 (load addr:$src))), addr:$dst),
                     (implicit SR)]>;
-def ADD16mm : I16mm<0x0,
+def ADD16mm : I16mm<0b0101,
                     (outs), (ins memdst:$dst, memsrc:$src),
                     "add.w\t{$src, $dst}",
                     [(store (add (load addr:$dst), 
@@ -428,7 +451,7 @@ def ADD16mm : I16mm<0x0,
 let Uses = [SR] in {
 
 let isCommutable = 1 in { // X = ADDC Y, Z  == X = ADDC Z, Y
-def ADC8rr  : I8rr<0x0,
+def ADC8rr  : I8rr<opcodeUNKNOWN,
                    (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                    "addc.b\t{$src2, $dst}",
                    [(set GR8:$dst, (adde GR8:$src, GR8:$src2)),
@@ -502,7 +525,7 @@ def ADC16mm : I8mm<0x0,
 } // Uses = [SR]
 
 let isCommutable = 1 in { // X = AND Y, Z  == X = AND Z, Y
-def AND8rr  : I8rr<0x0,
+def AND8rr  : I8rr<opcodeAND,
                    (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                    "and.b\t{$src2, $dst}",
                    [(set GR8:$dst, (and GR8:$src, GR8:$src2)),
@@ -586,7 +609,7 @@ def AND16mm : I16mm<0x0,
 }
 
 let isCommutable = 1 in { // X = OR Y, Z  == X = OR Z, Y
-def OR8rr  : I8rr<0x0,
+def OR8rr  : I8rr<opcodeUNKNOWN,
                   (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                   "bis.b\t{$src2, $dst}",
                   [(set GR8:$dst, (or GR8:$src, GR8:$src2))]>;
@@ -658,7 +681,7 @@ def OR16mm : I16mm<0x0,
 }
 
 // bic does not modify condition codes
-def BIC8rr :  I8rr<0x0,
+def BIC8rr :  I8rr<opcodeUNKNOWN,
                    (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                    "bic.b\t{$src2, $dst}",
                    [(set GR8:$dst, (and GR8:$src, (not GR8:$src2)))]>;
@@ -699,12 +722,12 @@ def BIC16mm : I16mm<0x0,
 }
 
 let isCommutable = 1 in { // X = XOR Y, Z  == X = XOR Z, Y
-def XOR8rr  : I8rr<0x0,
+def XOR8rr  : I8rr<opcodeXOR,
                    (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                    "xor.b\t{$src2, $dst}",
                    [(set GR8:$dst, (xor GR8:$src, GR8:$src2)),
                     (implicit SR)]>;
-def XOR16rr : I16rr<0x0,
+def XOR16rr : I16rr<0b1110,
                     (outs GR16:$dst), (ins GR16:$src, GR16:$src2),
                     "xor.w\t{$src2, $dst}",
                     [(set GR16:$dst, (xor GR16:$src, GR16:$src2)),
@@ -781,34 +804,34 @@ def XOR16mm : I16mm<0x0,
 }
 
 
-def SUB8rr  : I8rr<0x0,
+def SUB8rr  : I8rr<opcodeSUB,
                    (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                    "sub.b\t{$src2, $dst}",
                    [(set GR8:$dst, (sub GR8:$src, GR8:$src2)),
                     (implicit SR)]>;
-def SUB16rr : I16rr<0x0,
+def SUB16rr : I16rr<0b1000,
                     (outs GR16:$dst), (ins GR16:$src, GR16:$src2),
                     "sub.w\t{$src2, $dst}",
                     [(set GR16:$dst, (sub GR16:$src, GR16:$src2)),
                      (implicit SR)]>;
 
-def SUB8ri  : I8ri<0x0,
+def SUB8ri  : I8ri<0b1000,
                    (outs GR8:$dst), (ins GR8:$src, i8imm:$src2),
                    "sub.b\t{$src2, $dst}",
                    [(set GR8:$dst, (sub GR8:$src, imm:$src2)),
                     (implicit SR)]>;
-def SUB16ri : I16ri<0x0,
-                    (outs GR16:$dst), (ins GR16:$src, i16imm:$src2),
-                    "sub.w\t{$src2, $dst}",
-                    [(set GR16:$dst, (sub GR16:$src, imm:$src2)),
+def SUB16ri : I16ri_WELL<opcodeSUB,
+                    (outs GR16:$dst), (ins GR16:$src, i16imm:$IMM),
+                    "sub.w\t{$IMM, $dst}",
+                    [(set GR16:$dst, (sub GR16:$src, imm:$IMM)),
                      (implicit SR)]>;
 
-def SUB8rm  : I8rm<0x0,
+def SUB8rm  : I8rm<0b1000,
                    (outs GR8:$dst), (ins GR8:$src, memsrc:$src2),
                    "sub.b\t{$src2, $dst}",
                    [(set GR8:$dst, (sub GR8:$src, (load addr:$src2))),
                     (implicit SR)]>;
-def SUB16rm : I16rm<0x0,
+def SUB16rm : I16rm<0b1000,
                     (outs GR16:$dst), (ins GR16:$src, memsrc:$src2),
                     "sub.w\t{$src2, $dst}",
                     [(set GR16:$dst, (sub GR16:$src, (load addr:$src2))),
@@ -816,46 +839,46 @@ def SUB16rm : I16rm<0x0,
 
 let mayLoad = 1, hasExtraDefRegAllocReq = 1, 
 Constraints = "$base = $base_wb, $src = $dst" in {
-def SUB8rm_POST : IForm8<0x0, DstReg, SrcPostInc, Size2Bytes,
+def SUB8rm_POST : IForm8<0b1000, DstReg, SrcPostInc, Size2Bytes,
                          (outs GR8:$dst, GR16:$base_wb),
                          (ins GR8:$src, GR16:$base),
                          "sub.b\t{@$base+, $dst}", []>;
-def SUB16rm_POST : IForm16<0x0, DstReg, SrcPostInc, Size2Bytes,
+def SUB16rm_POST : IForm16<0b1000, DstReg, SrcPostInc, Size2Bytes,
                           (outs GR16:$dst, GR16:$base_wb),
                           (ins GR16:$src, GR16:$base),
                           "sub.w\t{@$base+, $dst}", []>;
 }
 
 let Constraints = "" in {
-def SUB8mr  : I8mr<0x0,
+def SUB8mr  : I8mr<0b1000,
                    (outs), (ins memdst:$dst, GR8:$src),
                    "sub.b\t{$src, $dst}",
                    [(store (sub (load addr:$dst), GR8:$src), addr:$dst),
                     (implicit SR)]>;
-def SUB16mr : I16mr<0x0,
+def SUB16mr : I16mr<0b1000,
                     (outs), (ins memdst:$dst, GR16:$src),
                     "sub.w\t{$src, $dst}",
                     [(store (sub (load addr:$dst), GR16:$src), addr:$dst),
                      (implicit SR)]>;
 
-def SUB8mi  : I8mi<0x0,
+def SUB8mi  : I8mi<0b1000,
                    (outs), (ins memdst:$dst, i8imm:$src),
                    "sub.b\t{$src, $dst}",
                    [(store (sub (load addr:$dst), (i8 imm:$src)), addr:$dst),
                     (implicit SR)]>;
-def SUB16mi : I16mi<0x0,
+def SUB16mi : I16mi<0b1000,
                     (outs), (ins memdst:$dst, i16imm:$src),
                     "sub.w\t{$src, $dst}",
                     [(store (sub (load addr:$dst), (i16 imm:$src)), addr:$dst),
                      (implicit SR)]>;
 
-def SUB8mm  : I8mm<0x0,
+def SUB8mm  : I8mm<0b1000,
                    (outs), (ins memdst:$dst, memsrc:$src),
                    "sub.b\t{$src, $dst}",
                    [(store (sub (load addr:$dst), 
                                 (i8 (load addr:$src))), addr:$dst),
                     (implicit SR)]>;
-def SUB16mm : I16mm<0x0,
+def SUB16mm : I16mm<0b1000,
                     (outs), (ins memdst:$dst, memsrc:$src),
                     "sub.w\t{$src, $dst}",
                     [(store (sub (load addr:$dst), 
@@ -864,7 +887,7 @@ def SUB16mm : I16mm<0x0,
 }
 
 let Uses = [SR] in {
-def SBC8rr  : I8rr<0x0,
+def SBC8rr  : I8rr<opcodeUNKNOWN,
                    (outs GR8:$dst), (ins GR8:$src, GR8:$src2),
                    "subc.b\t{$src2, $dst}",
                    [(set GR8:$dst, (sube GR8:$src, GR8:$src2)),
@@ -942,13 +965,13 @@ def SAR8r1  : II8r<0x0,
                    "rra.b\t$dst",
                    [(set GR8:$dst, (MSP430rra GR8:$src)),
                     (implicit SR)]>;
-def SAR16r1 : II16r<0x0,
+def SAR16r1 : II16r<opcodeRRA,
                     (outs GR16:$dst), (ins GR16:$src),
                     "rra.w\t$dst",
                     [(set GR16:$dst, (MSP430rra GR16:$src)),
                      (implicit SR)]>;
 
-def SHL8r1  : I8rr<0x0,
+def SHL8r1  : I8rr<opcodeUNKNOWN,
                    (outs GR8:$dst), (ins GR8:$src),
                    "rla.b\t$dst",
                    [(set GR8:$dst, (MSP430rla GR8:$src)),
@@ -971,7 +994,7 @@ def SAR16r1c : Pseudo<(outs GR16:$dst), (ins GR16:$src),
                        (implicit SR)]>;
 
 // FIXME: Memory sext's ?
-def SEXT16r : II16r<0x0,
+def SEXT16r : II16r<opcodeSXT,
                     (outs GR16:$dst), (ins GR16:$src),
                     "sxt\t$dst",
                     [(set GR16:$dst, (sext_inreg GR16:$src, i8)),
@@ -979,13 +1002,13 @@ def SEXT16r : II16r<0x0,
 
 } // Defs = [SR]
 
-def ZEXT16r : I8rr<0x0,
+def ZEXT16r : I8rr<opcodeMOV,
                    (outs GR16:$dst), (ins GR16:$src),
                    "mov.b\t{$src, $dst}",
                    [(set GR16:$dst, (zext (trunc GR16:$src)))]>;
 
 // FIXME: Memory bitswaps?
-def SWPB16r : II16r<0x0,
+def SWPB16r : II16r<opcodeSWPB,
                     (outs GR16:$dst), (ins GR16:$src),
                     "swpb\t$dst",
                     [(set GR16:$dst, (bswap GR16:$src))]>;
@@ -994,7 +1017,7 @@ def SWPB16r : II16r<0x0,
 
 // Integer comparisons
 let Defs = [SR] in {
-def CMP8rr  : I8rr<0x0,
+def CMP8rr  : I8rr<opcodeUNKNOWN,
                    (outs), (ins GR8:$src, GR8:$src2),
                    "cmp.b\t{$src2, $src}",
                    [(MSP430cmp GR8:$src, GR8:$src2), (implicit SR)]>;
@@ -1049,7 +1072,7 @@ def CMP16mr : I16mr<0x0,
 // BIT TESTS, just sets condition codes
 // Note that the C condition is set differently than when using CMP.
 let isCommutable = 1 in {
-def BIT8rr  : I8rr<0x0,
+def BIT8rr  : I8rr<opcodeUNKNOWN,
                    (outs), (ins GR8:$src, GR8:$src2),
                    "bit.b\t{$src2, $src}",
                    [(MSP430cmp (and_su GR8:$src, GR8:$src2), 0),

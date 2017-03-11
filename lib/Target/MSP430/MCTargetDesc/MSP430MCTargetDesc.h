@@ -15,11 +15,14 @@
 #define LLVM_LIB_TARGET_MSP430_MCTARGETDESC_MSP430MCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
+#include "llvm/MC/MCELFObjectWriter.h"
 
 namespace llvm {
 class Target;
 
 extern Target TheMSP430Target;
+
+MCObjectWriter *createMSP430ObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI);
 
 } // End llvm namespace
 

@@ -12,6 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "MSP430MCTargetDesc.h"
+#include "MSP430MCAsmBackend.h"
+#include "MSP430MCCodeEmitter.h"
 #include "InstPrinter/MSP430InstPrinter.h"
 #include "MSP430MCAsmInfo.h"
 #include "llvm/MC/MCCodeGenInfo.h"
@@ -82,6 +84,10 @@ extern "C" void LLVMInitializeMSP430TargetMC() {
   TargetRegistry::RegisterMCRegInfo(TheMSP430Target,
                                     createMSP430MCRegisterInfo);
 
+  TargetRegistry::RegisterMCAsmBackend(TheMSP430Target, createMSP430MCAsmBackend);
+
+  TargetRegistry::RegisterMCCodeEmitter(TheMSP430Target, createMSP430MCCodeEmitter);
+									
   // Register the MC subtarget info.
   TargetRegistry::RegisterMCSubtargetInfo(TheMSP430Target,
                                           createMSP430MCSubtargetInfo);
