@@ -95,83 +95,95 @@ class IForm<bits<4> opcode, DestMode dest, bit bw, SourceMode src, SizeVal sz,
 }
 
 // 8 bit IForm instructions
-class IForm8<bits<4> opcode, DestMode dest, SourceMode src, SizeVal sz,
+class IForm8<IOPCODE opcode, DestMode dest, SourceMode src, SizeVal sz,
              dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm<opcode, dest, 1, src, sz, outs, ins, asmstr, pattern>;
+  : IForm<opcode.Value, dest, 1, src, sz, outs, ins, asmstr, pattern>;
 
 class I8rr<IOPCODE opcode,
            dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm8<opcode.Value, DstReg, SrcReg, Size2Bytes, outs, ins, asmstr, pattern>;
+  : IForm8<opcode, DstReg, SrcReg, Size2Bytes, outs, ins, asmstr, pattern>;
 
-class I8ri<bits<4> opcode,
+class I8ri<IOPCODE opcode,
            dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm8<opcode, DstReg, SrcImm, Size4Bytes, outs, ins, asmstr, pattern>;
 
-class I8rm<bits<4> opcode,
+class I8ri_WELL<IOPCODE opcode,
+         dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IForm8<opcode, DstReg, SrcImm, Size4Bytes, outs, ins, asmstr, pattern> {
+    bits<16> IMM; let Inst{31-16} = IMM;
+    bits<4> dst; let Inst{3-0} = dst;
+    let Inst{11-8} = 0;
+}
+
+class I8ri_CMP<IOPCODE opcode,
+         dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IForm8<opcode, DstReg, SrcImm, Size4Bytes, outs, ins, asmstr, pattern> {
+    bits<16> src2; let Inst{31-16} = src2;
+    bits<4> src; let Inst{3-0} = src;
+    let Inst{11-8} = 0;
+}
+
+class I8rm<IOPCODE opcode,
            dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm8<opcode, DstReg, SrcMem, Size4Bytes, outs, ins, asmstr, pattern>;
 
-class I8mr<bits<4> opcode,
+class I8mr<IOPCODE opcode,
            dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm8<opcode, DstMem, SrcReg, Size4Bytes, outs, ins, asmstr, pattern>;
 
-class I8mi<bits<4> opcode,
+class I8mi<IOPCODE opcode,
            dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm8<opcode, DstMem, SrcImm, Size6Bytes, outs, ins, asmstr, pattern>;
 
-class I8mm<bits<4> opcode,
+class I8mm<IOPCODE opcode,
            dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm8<opcode, DstMem, SrcMem, Size6Bytes, outs, ins, asmstr, pattern>;
 
 // 16 bit IForm instructions
-class IForm16<bits<4> opcode, DestMode dest, SourceMode src, SizeVal sz,
+class IForm16<IOPCODE opcode, DestMode dest, SourceMode src, SizeVal sz,
               dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm<opcode, dest, 0, src, sz, outs, ins, asmstr, pattern>;
+  : IForm<opcode.Value, dest, 0, src, sz, outs, ins, asmstr, pattern>;
 
 class IForm16_WELL<IOPCODE opcode, DestMode dest, SourceMode src, SizeVal sz,
               dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm<opcode.Value, dest, 0, src, sz, outs, ins, asmstr, pattern>;
 
-class I16rr<bits<4> opcode,
+class I16rr<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm16<opcode, DstReg, SrcReg, Size2Bytes, outs, ins, asmstr, pattern>;
 
 class I16rr_WELL<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm16<opcode.Value, DstReg, SrcReg, Size2Bytes, outs, ins, asmstr, pattern> {
+  : IForm16<opcode, DstReg, SrcReg, Size2Bytes, outs, ins, asmstr, pattern> {
   bits<4> src2; let Inst{11-8} = src2;
   bits<4> dst; let Inst{3-0} = dst;
 }
 
-class I16ri<bits<4> opcode,
+class I16ri<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm16<opcode, DstReg, SrcImm, Size4Bytes, outs, ins, asmstr, pattern>;
 
 class I16ri_WELL<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm16<opcode.Value, DstReg, SrcImm, Size4Bytes, outs, ins, asmstr, pattern> {
+  : IForm16<opcode, DstReg, SrcImm, Size4Bytes, outs, ins, asmstr, pattern> {
   bits<16> IMM; let Inst{31-16} = IMM;
   bits<4> dst; let Inst{3-0} = dst;
   let Inst{11-8} = 0;
 }
 
-class I16rm<bits<4> opcode,
+class I16rm<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm16<opcode, DstReg, SrcMem, Size4Bytes, outs, ins, asmstr, pattern>;
-
-class I16rm_WELL<IOPCODE opcode,
-            dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm16<opcode.Value, DstReg, SrcMem, Size4Bytes, outs, ins, asmstr, pattern> {
-  bits<4> MEMSRCREG; let Inst{11-8} = MEMSRCREG;
-  bits<16> MEMSRCIMM; let Inst{31-16} = MEMSRCIMM;
-  bits<4> dst; let Inst{3-0} = dst;
+  : IForm16<opcode, DstReg, SrcMem, Size4Bytes, outs, ins, asmstr, pattern> {
+  //bits<4> dst; let Inst{3-0} = dst;
+  //bits<4> MEMSRCREG; let Inst{11-8} = MEMSRCREG;
+  //bits<16> MEMSRCIMM; let Inst{31-16} = MEMSRCIMM;
 }
 
-class I16mr<bits<4> opcode,
+class I16mr<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm16<opcode, DstMem, SrcReg, Size4Bytes, outs, ins, asmstr, pattern>;
 
-class I16mr_WELL<bits<4> opcode,
+class I16mr_WELL<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm16<opcode, DstMem, SrcReg, Size4Bytes, outs, ins, asmstr, pattern> {
   bits<4> MEMDSTREG; let Inst{3-0} = MEMDSTREG;
@@ -179,23 +191,34 @@ class I16mr_WELL<bits<4> opcode,
   bits<4> src; let Inst{11-8} = src;
 }
 
-class I16mi<bits<4> opcode,
-            dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm16<opcode, DstMem, SrcImm, Size6Bytes, outs, ins, asmstr, pattern>;
-
-class I16mi_WELL<bits<4> opcode,
+class I16mi<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
   : IForm16<opcode, DstMem, SrcImm, Size6Bytes, outs, ins, asmstr, pattern>
 {
   let Inst{11-8} = 0;
+  bits<16> src; let Inst{31-16} = src;
   bits<4> MEMDSTREG; let Inst{3-0} = MEMDSTREG;
   bits<16> MEMDSTIMM; let Inst{47-32} = MEMDSTIMM;
-  bits<16> src; let Inst{31-16} = src; 
 }
 
-class I16mm<bits<4> opcode,
+class I16mi_CMP<IOPCODE opcode,
             dag outs, dag ins, string asmstr, list<dag> pattern>
-  : IForm16<opcode, DstMem, SrcMem, Size6Bytes, outs, ins, asmstr, pattern>;
+  : IForm16<opcode, DstMem, SrcImm, Size6Bytes, outs, ins, asmstr, pattern>
+{
+  let Inst{11-8} = 0;
+  bits<16> src2; let Inst{31-16} = src2;
+  bits<4> MEMSRCREG; let Inst{3-0} = MEMSRCREG;
+  bits<16> MEMSRCIMM; let Inst{47-32} = MEMSRCIMM;
+}
+
+class I16mm<IOPCODE opcode,
+            dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IForm16<opcode, DstMem, SrcMem, Size6Bytes, outs, ins, asmstr, pattern> {
+  bits<4> MEMDSTREG; let Inst{3-0} = MEMDSTREG;
+  bits<16> MEMDSTIMM; let Inst{47-32} = MEMDSTIMM;
+  bits<4> MEMSRCREG; let Inst{11-8} = MEMSRCREG;
+  bits<16> MEMSRCIMM; let Inst{31-16} = MEMSRCIMM;
+}
 
 // MSP430 Single Operand (Format II) Instructions
 class IIForm<bits<9> opcode, bit bw, SourceMode src, SizeVal sz,

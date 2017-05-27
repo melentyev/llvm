@@ -6,8 +6,12 @@
 
 #include "MSP430MCAsmBackend.h"
 #include "MCTargetDesc/MSP430MCTargetDesc.h"
+#include "MCTargetDesc/MSP430FixupKinds.h"
 
 using namespace llvm;
+
+// TODO remove
+#include <iostream>
 
 namespace {
 class MSP430MCAsmBackend : public MCAsmBackend {
@@ -16,19 +20,36 @@ public:
 	MSP430MCAsmBackend(uint8_t osABI): OSABI(osABI) {}
 
 	unsigned getNumFixupKinds() const override {
-		return 0;
+        return MSP430::NumTargetFixupKinds;
 	}
 	const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override
 	{
-		if (Kind >= FirstTargetFixupKind)
-		{
-			llvm_unreachable("llvm_unreachable getFixupKindInfo");
-		}
-		return MCAsmBackend::getFixupKindInfo(Kind);
+        const static MCFixupKindInfo Infos[MSP430::NumTargetFixupKinds] = {
+                // name                    offset bits  flags
+                {"fixup_msp430_jmp10", 6, 10, MCFixupKindInfo::FKF_IsPCRel}
+        };
+
+        if (Kind < FirstTargetFixupKind) {
+            return MCAsmBackend::getFixupKindInfo(Kind);
+        }
+
+        assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
+                       "Invalid kind!");
+        return Infos[Kind - FirstTargetFixupKind];
 	}
 	void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
 		uint64_t Value, bool IsPCRel) const override {
-		llvm_unreachable("llvm_unreachable applyFixup");
+
+        if (Fixup.getKind() == MSP430::Fixups::fixup_msp430_jmp10) {
+            // TODO Finish;
+			unsigned Offset = Fixup.getOffset();
+			unsigned InstOffset = (Value >> 1) - 1;
+            Data[Offset] = uint8_t(InstOffset & 0xFF);
+			Data[Offset + 1] |= uint8_t((InstOffset >> 8) & 0x3);
+            std::cout << "applyFixup fixup_msp430_jmp10 DataSize " << DataSize << " Data " << Data << std::endl;
+        }
+
+		//llvm_unreachable("llvm_unreachable applyFixup");
 	}
 	bool mayNeedRelaxation(const MCInst &Inst) const override {
 		return false;

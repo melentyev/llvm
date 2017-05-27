@@ -14,12 +14,14 @@
 class MSP430Reg<bits<4> num, string n> : Register<n> {
   field bits<4> Num = num;
   let Namespace = "MSP430";
+  let HWEncoding = { 0b000000000000, Num };
 }
 
 class MSP430RegWithSubregs<bits<4> num, string n, list<Register> subregs> 
   : RegisterWithSubRegs<n, subregs> {
   field bits<4> Num = num;
   let Namespace = "MSP430";
+  let HWEncoding = { 0b000000000000, Num };
 }
 
 //===----------------------------------------------------------------------===//

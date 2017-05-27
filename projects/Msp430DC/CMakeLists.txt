@@ -16,4 +16,5 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_library(Msp430DC
   Msp430DC.cpp
+  Msp430DCintC.cpp
   )

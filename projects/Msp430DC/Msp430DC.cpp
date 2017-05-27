@@ -2,8 +2,6 @@
 
 namespace Msp430DC {
 
-std::vector<Msp430Context> Msp430Context::stack;
-
 std::unique_ptr<Module> Msp430DC::getModule(StringRef text) {
 	std::unique_ptr<Module> M;
 	SMDiagnostic Err;
