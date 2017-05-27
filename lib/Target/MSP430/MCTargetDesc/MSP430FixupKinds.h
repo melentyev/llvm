@@ -1,4 +1,4 @@
-//===-- SparcFixupKinds.h - Sparc Specific Fixup Entries --------*- C++ -*-===//
+//===-- MSP430FixupKinds.h - MSP430 Specific Fixup Entries ------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
